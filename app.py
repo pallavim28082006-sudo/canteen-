@@ -4,6 +4,7 @@ import db
 import ui
 
 st.set_page_config(page_title="Canteen", page_icon="🍽️")
+ui.inject_css()
 
 db.init_db()
 
