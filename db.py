@@ -1,18 +1,45 @@
-"""SQLite database layer for the canteen app (no user accounts)."""
+"""SQLite database layer for the canteen app."""
 import os
 import secrets
 import sqlite3
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "canteen_v2.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "canteen_v3.db")
 
+# Order here = order of the tabs on the menu page.
+CATEGORIES = {
+    "Breakfast": "🥞",
+    "Snacks": "🍟",
+    "Dinner": "🍛",
+    "Tea": "🍵",
+    "Coffee": "☕",
+    "Cold Drinks": "🥤",
+    "Desserts": "🍨",
+    "Other": "🍽️",
+}
+
+# (name, price, category, emoji)
 SEED_MENU = [
-    ("Veg Sandwich", 40.0),
-    ("Masala Dosa", 60.0),
-    ("Samosa (2 pcs)", 30.0),
-    ("Veg Fried Rice", 80.0),
-    ("Chai", 15.0),
-    ("Cold Coffee", 50.0),
+    ("Masala Dosa", 60, "Breakfast", "🥞"),
+    ("Idli Sambar (3 pcs)", 40, "Breakfast", "🍚"),
+    ("Poha", 30, "Breakfast", "🍲"),
+    ("Samosa (2 pcs)", 30, "Snacks", "🥟"),
+    ("Veg Sandwich", 40, "Snacks", "🥪"),
+    ("French Fries", 50, "Snacks", "🍟"),
+    ("Veg Puff", 25, "Snacks", "🥐"),
+    ("Veg Thali", 90, "Dinner", "🍱"),
+    ("Veg Fried Rice", 80, "Dinner", "🍛"),
+    ("Chapati & Curry", 70, "Dinner", "🫓"),
+    ("Masala Chai", 15, "Tea", "🍵"),
+    ("Ginger Tea", 15, "Tea", "🫖"),
+    ("Green Tea", 20, "Tea", "🍃"),
+    ("Filter Coffee", 20, "Coffee", "☕"),
+    ("Cappuccino", 50, "Coffee", "☕"),
+    ("Cold Coffee", 50, "Coffee", "🧋"),
+    ("Lime Soda", 25, "Cold Drinks", "🍋"),
+    ("Mango Shake", 50, "Cold Drinks", "🥭"),
+    ("Gulab Jamun (2 pcs)", 30, "Desserts", "🍮"),
+    ("Ice Cream", 40, "Desserts", "🍨"),
 ]
 
 
@@ -30,6 +57,10 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 price REAL NOT NULL,
+                category TEXT NOT NULL DEFAULT 'Other',
+                emoji TEXT NOT NULL DEFAULT '🍽️',
+                image BLOB,
+                image_url TEXT,
                 available INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS orders (
@@ -50,7 +81,10 @@ def init_db():
             """
         )
         if conn.execute("SELECT COUNT(*) FROM menu").fetchone()[0] == 0:
-            conn.executemany("INSERT INTO menu (name, price) VALUES (?, ?)", SEED_MENU)
+            conn.executemany(
+                "INSERT INTO menu (name, price, category, emoji) VALUES (?, ?, ?, ?)",
+                SEED_MENU,
+            )
 
 
 # ---------- menu ----------
@@ -63,9 +97,25 @@ def list_menu(only_available=False):
         return conn.execute(q).fetchall()
 
 
-def add_menu_item(name, price):
+def add_menu_item(name, price, category, emoji, image=None, image_url=""):
     with get_conn() as conn:
-        conn.execute("INSERT INTO menu (name, price) VALUES (?, ?)", (name, price))
+        conn.execute(
+            "INSERT INTO menu (name, price, category, emoji, image, image_url) VALUES (?, ?, ?, ?, ?, ?)",
+            (name, price, category, emoji or CATEGORIES.get(category, "🍽️"), image, image_url or None),
+        )
+
+
+def update_menu_item(item_id, name, price, category, emoji, image_url="",
+                     new_image=None, remove_image=False):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE menu SET name=?, price=?, category=?, emoji=?, image_url=? WHERE id=?",
+            (name, price, category, emoji or CATEGORIES.get(category, "🍽️"), image_url or None, item_id),
+        )
+        if new_image is not None:
+            conn.execute("UPDATE menu SET image=? WHERE id=?", (new_image, item_id))
+        elif remove_image:
+            conn.execute("UPDATE menu SET image=NULL WHERE id=?", (item_id,))
 
 
 def set_available(item_id, available):
